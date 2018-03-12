@@ -2,7 +2,7 @@
 EMBEDDINGS_LEVY_DEPS_300 = 'deps.words.txt' # 174.015 words, 300 dim
 
 # lexicons
-LEXICON_FULL_BRACKETS_FIX = "fn15_lexicon_fulltext"
+LEXICON_FULL_BRACKETS_FIX = "fn_lexicon"
 
 # corpora
 # full training sets
