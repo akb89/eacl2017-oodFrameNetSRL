@@ -3,6 +3,8 @@ from keras.models import Sequential
 from keras.layers.core import Dense
 from keras.utils.np_utils import to_categorical
 from collections import Counter
+from scipy import sparse
+
 
 from lightfm import LightFM
 # LightFM source code had to be hacked as it is buggy and does not say with which python version it actually should work
@@ -13,7 +15,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 # Generic classifier, doesn't do much
 class Classifier:
-    def __init__(self, lexicon, all_unknown=False, num_components=False, max_sampled=False, num_epochs=False ):
+    def __init__(self, lexicon, all_unknown=False, num_components=False, max_sampled=False, num_epochs=False):
         self.clf = None
         self.lexicon = lexicon
         self.all_unknown = all_unknown
@@ -83,13 +85,16 @@ class SharingDNNClassifier(Classifier):
         self.clf = Sequential()
         self.clf.add(Dense(256, input_dim=len(X[0]), activation='relu'))
         self.clf.add(Dense(100, activation='relu'))
-        self.clf.add(Dense(output_dim=np.max(y)+1, activation='softmax'))  # np.max()+1 because frames are 0-indexed
+        #self.clf.add(Dense(output_dim=np.max(y)+1, activation='softmax'))  # np.max()+1 because frames are 0-indexed
+        self.clf.add(Dense(units=np.max(y)+1, activation='softmax'))
 
         self.clf.compile(optimizer='adagrad',
                     loss='categorical_crossentropy',
                     metrics=['accuracy'])
 
-        self.clf.fit(X, to_categorical(y, np.max(y)+1), verbose=1, nb_epoch=100)
+        #self.clf.fit(X, to_categorical(y, np.max(y)+1), verbose=1, nb_epoch=100)
+        self.clf.fit(X, to_categorical(y, np.max(y)+1), verbose=1, epochs=100)
+
 
     def predict(self, X, lemmapos):
         available_frames = self.lexicon.get_available_frame_ids(lemmapos)  # get available frames from lexicon
@@ -118,12 +123,12 @@ class SharingDNNClassifier(Classifier):
 # classification with WSABIE latent representations
 class WsabieClassifier(Classifier):
     def train(self, X, y, lemmapos_list):
-        
+
         # MODEL
         self.clf = LightFM(no_components = self.num_components, learning_schedule = 'adagrad', loss = 'warp', \
                            learning_rate = 0.05, epsilon = 1e-06, item_alpha = 0.0, user_alpha = 1e-6, \
                            max_sampled = self.max_sampled, random_state = None)
-        
+
         # DATA
         # training data
         # X: list of vectors
@@ -134,10 +139,12 @@ class WsabieClassifier(Classifier):
         #    --> these are used to create the interaction matrix for the training set such that LightFM can deal with it
         # y_interactionLabels: interaction matrix is of size (num sentences in y) x (num frames) with 1 indicating the frame label for a predicate in its context sentence
         y_interactionLabels = self.createInteractionMatrix(y)
-                 
+        X_CSR = sparse.csr_matrix(X)
         # FIT
-        self.clf = self.clf.fit(interactions = y_interactionLabels, user_features = X, item_features = None, \
-                                sample_weight = None, epochs = self.num_epochs, num_threads = 2, verbose = True)
+        self.clf = self.clf.fit(interactions = y_interactionLabels, user_features = X_CSR, item_features = None, sample_weight = None, epochs = self.num_epochs, num_threads = 2, verbose = True)
+
+        # self.clf = self.clf.fit(interactions = y_interactionLabels, user_features = X, item_features = None, \
+        #                         sample_weight = None, epochs = self.num_epochs, num_threads = 2, verbose = True)
 
     def predict(self, X, lemmapos):
         # DATA
@@ -150,13 +157,13 @@ class WsabieClassifier(Classifier):
         # get projection matrices from trained MODEL
         user_embeddings_fromTraining = self.clf.user_embeddings
         item_embeddings_fromTraining = self.clf.item_embeddings
-        
+
         # PREDICT
         # do the prediction for this new user via the dot product of the user feature X and the projection matrix user embeddings obtained during training
         embeddedNewUser = np.dot(X_reshape, user_embeddings_fromTraining) # now in the same space as the item embeddings obtained during training
         # use cosine similarity as similarity measure between the embedded test sentence and all the embeddings corresponding to frames
         similarity_to_all_frames = cosine_similarity(embeddedNewUser, item_embeddings_fromTraining)[0]
-        
+
         available_frame_IDs = self.lexicon.get_available_frame_ids(lemmapos)  # get available frame IDs for this lemma.pos from lexicon
         ambig = self.lexicon.is_ambiguous(lemmapos)  # amiguous = can evoke more than one frame
         unknown = self.lexicon.is_unknown(lemmapos)  # unknown = not in lexicon
@@ -167,7 +174,7 @@ class WsabieClassifier(Classifier):
             # if the lemma.pos is known and has only one frame, just return it. Even if there is no data for this lemma.pos.
             if not ambig:
                 return available_frame_IDs[0]
-            
+
         # pick the best-scoring frameID among available frameIDs
         bestScore = None
         best_frame_ID = None
@@ -177,16 +184,16 @@ class WsabieClassifier(Classifier):
                 bestScore = score
                 best_frame_ID = frame_ID
         return best_frame_ID
-    
-    
+
+
     def createInteractionMatrix(self, y_ID):
         # interactionMatrix is of size (num sentences in y_ID) x (num frames) with 1 indicating the frame label for a predicate in its context sentence
-        
+
         numSentInY = len(y_ID)
         numFrames = len(self.lexicon.get_all_frame_ids())
         y_interactionLabels = np.zeros([numSentInY, numFrames], dtype = np.float32)
-                
+
         for i in range(numSentInY):
             y_interactionLabels[i, y_ID[i]] = 1.
-        
-        return y_interactionLabels
+        return sparse.coo_matrix(y_interactionLabels)
+        #return y_interactionLabels
