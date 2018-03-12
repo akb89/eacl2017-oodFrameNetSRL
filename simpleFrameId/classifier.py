@@ -15,7 +15,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 # Generic classifier, doesn't do much
 class Classifier:
-    def __init__(self, lexicon, all_unknown=False, num_components=False, max_sampled=False, num_epochs=False):
+    def __init__(self, lexicon, all_unknown, num_components,
+                 max_sampled, num_epochs):
         self.clf = None
         self.lexicon = lexicon
         self.all_unknown = all_unknown
@@ -121,14 +122,23 @@ class SharingDNNClassifier(Classifier):
 
 
 # classification with WSABIE latent representations
-class WsabieClassifier(Classifier):
+class WsabieClassifier():
+
+    def __init__(self, lexicon, all_unknown, num_components,
+                 max_sampled, num_epochs, num_threads):
+        self.clf = LightFM(no_components=num_components,
+                           learning_schedule='adagrad', loss='warp',
+                           learning_rate=0.05, epsilon=1e-06,
+                           item_alpha=0.0, user_alpha=1e-6,
+                           max_sampled=max_sampled, random_state=None)
+        self.lexicon = lexicon
+        self.all_unknown = all_unknown
+        self.num_components = num_components
+        self.max_sampled = max_sampled
+        self.num_epochs = num_epochs
+        self.num_threads = num_threads
+
     def train(self, X, y, lemmapos_list):
-
-        # MODEL
-        self.clf = LightFM(no_components = self.num_components, learning_schedule = 'adagrad', loss = 'warp', \
-                           learning_rate = 0.05, epsilon = 1e-06, item_alpha = 0.0, user_alpha = 1e-6, \
-                           max_sampled = self.max_sampled, random_state = None)
-
         # DATA
         # training data
         # X: list of vectors
@@ -141,7 +151,10 @@ class WsabieClassifier(Classifier):
         y_interactionLabels = self.createInteractionMatrix(y)
         X_CSR = sparse.csr_matrix(X)
         # FIT
-        self.clf = self.clf.fit(interactions = y_interactionLabels, user_features = X_CSR, item_features = None, sample_weight = None, epochs = self.num_epochs, num_threads = 2, verbose = True)
+        self.clf = self.clf.fit(interactions=y_interactionLabels,
+                                user_features=X_CSR, item_features=None,
+                                sample_weight=None, epochs=self.num_epochs,
+                                num_threads=self.num_threads, verbose=True)
 
         # self.clf = self.clf.fit(interactions = y_interactionLabels, user_features = X, item_features = None, \
         #                         sample_weight = None, epochs = self.num_epochs, num_threads = 2, verbose = True)
@@ -162,7 +175,8 @@ class WsabieClassifier(Classifier):
         # do the prediction for this new user via the dot product of the user feature X and the projection matrix user embeddings obtained during training
         embeddedNewUser = np.dot(X_reshape, user_embeddings_fromTraining) # now in the same space as the item embeddings obtained during training
         # use cosine similarity as similarity measure between the embedded test sentence and all the embeddings corresponding to frames
-        similarity_to_all_frames = cosine_similarity(embeddedNewUser, item_embeddings_fromTraining)[0]
+        similarity_to_all_frames = cosine_similarity(
+            embeddedNewUser, item_embeddings_fromTraining)[0]
 
         available_frame_IDs = self.lexicon.get_available_frame_ids(lemmapos)  # get available frame IDs for this lemma.pos from lexicon
         ambig = self.lexicon.is_ambiguous(lemmapos)  # amiguous = can evoke more than one frame

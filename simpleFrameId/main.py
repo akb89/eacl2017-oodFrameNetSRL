@@ -19,23 +19,25 @@ def _train_and_decode(args):
     vsm_filepath = args.vector_space_model
     lexicon_filepath = args.lexicon
     mwa = args.multiword_averaging
-    all_unk = args.all_unknown
-    num_comp = args.num_components
-    max_sampl = args.max_sampled
-    num_ep = args.num_epochs
+    all_unknown = args.all_unknown
+    num_components = args.num_components
+    max_sampled = args.max_sampled
+    num_epochs = args.num_epochs
+    num_threads = args.num_threads
     corpus_train = args.train_splits
     corpus_test = args.test_splits
-    config = Config(WsabieClassifier, SentenceBowMapper)
+    clf = WsabieClassifier
     g_train = get_graphs(*sources.get_corpus(corpus_train))
     start_time = time.time()
     lexicon = Lexicon()
     lexicon.load_from_list(lexicon_filepath)
     vsm = VSM(vsm_filepath)
-    mapper = conf.get_feat_extractor()(vsm, lexicon)
+    mapper = SentenceBowMapper(vsm, lexicon)
     # prepare the data
     X_train, y_train, lemmapos_train, gid_train = mapper.get_matrix(g_train)
     # train the model
-    clf = conf.get_clf()(lexicon, all_unk, num_comp, max_sampl, num_ep)
+    clf = WsabieClassifier(lexicon, all_unknown, num_components,
+                           max_sampled, num_epochs)
     clf.train(X_train, y_train, lemmapos_train)
     # prepare test data
     g_test = get_graphs(*sources.get_corpus(corpus_test))
