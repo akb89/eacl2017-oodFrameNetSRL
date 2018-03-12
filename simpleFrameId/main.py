@@ -10,7 +10,7 @@ from resources import ResourceManager
 import time
 from numpy import random
 
-HOME = "/Users/AKB/GitHub/eacl2017-oodFrameNetSRL"  # adjust accordingly
+HOME = "/home/kabbach/eacl2017-oodFrameNetSRL"  # adjust accordingly
 
 if __name__ == "__main__":
 

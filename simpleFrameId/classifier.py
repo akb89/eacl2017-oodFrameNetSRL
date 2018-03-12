@@ -141,7 +141,7 @@ class WsabieClassifier(Classifier):
         y_interactionLabels = self.createInteractionMatrix(y)
         X_CSR = sparse.csr_matrix(X)
         # FIT
-        self.clf = self.clf.fit(interactions = y_interactionLabels, user_features = X_CSR, item_features = None, sample_weight = None, epochs = self.num_epochs, num_threads = 2, verbose = True)
+        self.clf = self.clf.fit(interactions = y_interactionLabels, user_features = X_CSR, item_features = None, sample_weight = None, epochs = self.num_epochs, num_threads = 20, verbose = True)
 
         # self.clf = self.clf.fit(interactions = y_interactionLabels, user_features = X, item_features = None, \
         #                         sample_weight = None, epochs = self.num_epochs, num_threads = 2, verbose = True)
