@@ -1,3 +1,5 @@
+import argparse
+
 from globals import *
 from data import get_graphs
 from extras import Lexicon, VSM
@@ -12,8 +14,40 @@ from numpy import random
 
 HOME = "/Users/AKB/GitHub/eacl2017-oodFrameNetSRL"  # adjust accordingly
 
-if __name__ == "__main__":
 
+def _train_and_decode(args):
+    vsm_filepath = args.vector_space_model
+    lexicon_filepath = args.lexicon
+    mwa = args.multiword_averaging
+    all_unk = args.all_unknown
+    num_comp = args.num_components
+    max_sampl = args.max_sampled
+    num_ep = args.num_epochs
+    corpus_train = args.train_splits
+    corpus_test = args.test_splits
+    config = Config(WsabieClassifier, SentenceBowMapper)
+    g_train = get_graphs(*sources.get_corpus(corpus_train))
+    start_time = time.time()
+    lexicon = Lexicon()
+    lexicon.load_from_list(lexicon_filepath)
+    vsm = VSM(vsm_filepath)
+    mapper = conf.get_feat_extractor()(vsm, lexicon)
+    # prepare the data
+    X_train, y_train, lemmapos_train, gid_train = mapper.get_matrix(g_train)
+    # train the model
+    clf = conf.get_clf()(lexicon, all_unk, num_comp, max_sampl, num_ep)
+    clf.train(X_train, y_train, lemmapos_train)
+    # prepare test data
+    g_test = get_graphs(*sources.get_corpus(corpus_test))
+    X_test, y_test, lemmapos_test, gid_test = mapper.get_matrix(g_test)
+    # predict and compare
+    for x, y_true, lemmapos, gid, g in zip(X_test, y_test, lemmapos_test,
+                                           gid_test, g_test):
+        y_predicted = clf.predict(x, lemmapos)
+
+
+
+def _all():
     random.seed(4)  # fix the random seed
 
     vsms = [EMBEDDINGS_LEVY_DEPS_300]  # vector space model to use
@@ -27,19 +61,19 @@ if __name__ == "__main__":
     num_epochs = [500]
 
     configs = []
-    for lexicon in lexicons:
-        for all_unk in all_unknown:
-            # DummyMapper doesn't do anything
-            configs += [Config(DataMajorityBaseline, DummyMapper, lexicon, None, False, all_unk, None, None, None)]
-            configs += [Config(LexiconMajorityBaseline, DummyMapper, lexicon, None, False, all_unk, None, None, None)]
-
-    # Add configurations for NN classifiers
-    for lexicon in lexicons:
-        for vsm in vsms:
-            for mwa in multiword_averaging:
-                for all_unk in all_unknown:
-                   configs += [Config(SharingDNNClassifier, SentenceBowMapper, lexicon, vsm, mwa, all_unk, None, None, None)]
-                   configs += [Config(SharingDNNClassifier, DependentsBowMapper, lexicon, vsm, mwa, all_unk, None, None, None)]
+    # for lexicon in lexicons:
+    #     for all_unk in all_unknown:
+    #         # DummyMapper doesn't do anything
+    #         configs += [Config(DataMajorityBaseline, DummyMapper, lexicon, None, False, all_unk, None, None, None)]
+    #         configs += [Config(LexiconMajorityBaseline, DummyMapper, lexicon, None, False, all_unk, None, None, None)]
+    #
+    # # Add configurations for NN classifiers
+    # for lexicon in lexicons:
+    #     for vsm in vsms:
+    #         for mwa in multiword_averaging:
+    #             for all_unk in all_unknown:
+    #                configs += [Config(SharingDNNClassifier, SentenceBowMapper, lexicon, vsm, mwa, all_unk, None, None, None)]
+    #                configs += [Config(SharingDNNClassifier, DependentsBowMapper, lexicon, vsm, mwa, all_unk, None, None, None)]
 
     # Add configurations for WSABIE classifiers
     for lexicon in lexicons:
@@ -130,3 +164,13 @@ if __name__ == "__main__":
                 print "============ STATUS: - train", current_train, "/", len(CORPORA_TRAIN), \
                     "conf", current_config, "/", len(configs),\
                     "test", current_test, "/", len(CORPORA_TEST)
+
+if __name__ == "__main__":
+    _all()
+    # parser = argparse.ArgumentParser()
+    # subparsers = parser.add_subparsers()
+    # parser_generate = subparsers.add_parser(
+    #     'generate', formatter_class=argparse.RawTextHelpFormatter,
+    #     help='generate lexicon')
+    # args = parser.parse_args()
+    # args.func(args)
