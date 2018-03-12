@@ -10,7 +10,7 @@ from resources import ResourceManager
 import time
 from numpy import random
 
-HOME = "/home/local/UKP/martin/repos/frameID/"  # adjust accordingly
+HOME = "/Users/AKB/GitHub/eacl2017-oodFrameNetSRL"  # adjust accordingly
 
 if __name__ == "__main__":
 
@@ -130,12 +130,3 @@ if __name__ == "__main__":
                 print "============ STATUS: - train", current_train, "/", len(CORPORA_TRAIN), \
                     "conf", current_config, "/", len(configs),\
                     "test", current_test, "/", len(CORPORA_TEST)
-
-
-
-
-
-
-
-
-
