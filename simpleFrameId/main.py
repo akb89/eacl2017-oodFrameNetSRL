@@ -1,3 +1,5 @@
+import sys
+
 from globals import *
 from data import get_graphs
 from extras import Lexicon, VSM
@@ -10,9 +12,10 @@ from resources import ResourceManager
 import time
 from numpy import random
 
-HOME = "/home/kabbach/eacl2017-oodFrameNetSRL"  # adjust accordingly
 
 if __name__ == "__main__":
+
+    HOME = sys.argv[1]
 
     random.seed(4)  # fix the random seed
 
