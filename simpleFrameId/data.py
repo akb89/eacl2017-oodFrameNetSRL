@@ -1,7 +1,18 @@
 import codecs, sys
 from graph import DependencyGraph
+from collections import OrderedDict
+from collections import Counter
 
 # Data management routines
+
+class OrderedCounter(Counter, OrderedDict):
+     'Counter that remembers the order elements are first encountered'
+
+     def __repr__(self):
+         return '%s(%r)' % (self.__class__.__name__, OrderedDict(self))
+
+     def __reduce__(self):
+         return self.__class__, (OrderedDict(self),)
 
 
 def fix_tid(src_tid, sep):  # fixes and unrolls the offsets
@@ -22,7 +33,7 @@ def fix_tid(src_tid, sep):  # fixes and unrolls the offsets
 
 
 def collect_srl_data(in_fes):  # load SRL data (~frame.elements). All the offsets are shifted by 1!
-    srl_data = {}  # {sentence_id: {fe_id: [[fee_frame, fee_lemmapos, {role: role_span}], [fee_frame2, {role: role_span}], ...]}
+    srl_data = OrderedCounter()  # {sentence_id: {fe_id: [[fee_frame, fee_lemmapos, {role: role_span}], [fee_frame2, {role: role_span}], ...]}
     for line in in_fes:
         line = line.strip().split("\t")
         fee_tid = fix_tid(line[5], "_")  # predicate offsets are given as tid_tid_tid_tid
@@ -30,13 +41,13 @@ def collect_srl_data(in_fes):  # load SRL data (~frame.elements). All the offset
         fee_lemmapos = line[4].lower()
         sid = int(line[7])
         role_info = line[8:]
-        srl_data[sid] = srl_data.get(sid, {})
+        srl_data[sid] = srl_data.get(sid, OrderedCounter())
         srl_data[sid][fee_tid] = srl_data[sid].get(fee_tid, [])
         fee_info = []  # ugly but so is the data! Multiple fee possible on single span
         fee_info += [fee_frame]
         fee_info += [fee_lemmapos]
 
-        role_dict = {}
+        role_dict = OrderedCounter()
         for x in range(0, len(role_info), 2):
             role_dict[role_info[0]] = fix_tid(role_info[1], ":")  # role offsets are given as start:end
         fee_info += [role_dict]
@@ -46,7 +57,7 @@ def collect_srl_data(in_fes):  # load SRL data (~frame.elements). All the offset
 
 def collect_sentence_data(in_sentences):  # load parse data (~all.lemma.tags)
     sid = 0
-    sentences = {}
+    sentences = OrderedCounter()
     for line in in_sentences:
         line = line.strip()
         if line:
@@ -54,11 +65,11 @@ def collect_sentence_data(in_sentences):  # load parse data (~all.lemma.tags)
             num_tok = int(line[0])
             line = line[1:]
             data = [line[x*num_tok:x*num_tok+num_tok] for x in range(0, len(line)/num_tok)]  # TODO list comprehension ninja required here
-            sentences[sid] = {}
+            sentences[sid] = OrderedCounter()
             try:
                 tid = 1
                 for form, pos, dep, head, _, lemma in zip(*data):
-                    sentences[sid][tid] = {}
+                    sentences[sid][tid] = OrderedCounter()
                     sentences[sid][tid]["form"] = form
                     sentences[sid][tid]["pos"] = pos
                     sentences[sid][tid]["dep"] = dep
@@ -85,7 +96,7 @@ def merge_to_graph(srl_data, sentences, verbose=False):  # zip sentence and SRL 
                     for pred_info in srl[pred_tid]:
                         g = DependencyGraph(nodes, edges)
                         frame, lemmapos, roles = pred_info
-                        roles_by_tid = {}
+                        roles_by_tid = OrderedCounter()
                         for (x, y) in roles.items():
                             for role_tid in y:
                                 roles_by_tid[int(role_tid)] = x
@@ -113,5 +124,3 @@ def get_graphs(src_sentences, src_fes, verbose=False):  # files in, graphs out
                 graph.gid = i
                 i += 1
             return graphs
-
-

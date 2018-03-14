@@ -1,4 +1,6 @@
+from __future__ import print_function
 import sys
+import os
 
 from globals import *
 from data import get_graphs
@@ -13,10 +15,51 @@ import time
 from numpy import random
 
 
-if __name__ == "__main__":
+def _train_and_decode(HOME):
+    random.seed(4)  # fix the random seed
+    vsm = EMBEDDINGS_LEVY_DEPS_300  # vector space model to use
+    lexicon = LEXICON_FULL_BRACKETS_FIX  # lexicon to use (mind the all_unknown setting!)
+    multiword_averaging = False  # treatment of multiword predicates, false - use head embedding, true - use avg
+    all_unknown = False  # makes the lexicon treat all LU as unknown, corresponds to the no-lex setting
+    conf = Config(SharingDNNClassifier, SentenceBowMapper, lexicon, vsm,
+                  multiword_averaging, all_unknown, None, None, None)
 
-    HOME = sys.argv[1]
+    print("Starting resource manager")
+    sources = ResourceManager(HOME)
 
+    print("Running the experiments!")
+    g_train = get_graphs(*sources.get_corpus(CORPUS_DAS_TRAIN))
+    lexicon = Lexicon()
+    # go to configuration, check which lexicon is needed, locate the lexicon in FS, load the lexicon
+    lexicon.load_from_list(sources.get_lexicon(conf.get_lexicon()))
+
+    # same for VSM
+    vsm = VSM(sources.get_vsm(conf.get_vsm()))
+    mapper = conf.get_feat_extractor()(vsm, lexicon)
+
+    # prepare the data
+    X_train, y_train, lemmapos_train, gid_train = mapper.get_matrix(g_train)
+
+    # train the model
+    clf = conf.get_clf()(lexicon, conf.get_all_unknown(),
+                         conf.get_num_components(), conf.get_max_sampled(),
+                         conf.get_num_epochs())
+    clf.train(X_train, y_train, lemmapos_train)
+
+    # prepare test data
+    g_test = get_graphs(*sources.get_corpus(CORPUS_DAS_TEST))
+    X_test, y_test, lemmapos_test, gid_test = mapper.get_matrix(g_test)
+
+    # predict and compare
+    with open(os.path.join(HOME, 'test.frames.predicted'), 'w') as output_stream:
+        for x, y_true, lemmapos, gid, g in zip(X_test, y_test, lemmapos_test,
+                                               gid_test, g_test):
+            y_predicted = clf.predict(x, lemmapos)
+            print(lexicon.get_frame(y_predicted), file=output_stream)
+
+
+
+def _train_all(HOME):
     random.seed(4)  # fix the random seed
 
     vsms = [EMBEDDINGS_LEVY_DEPS_300]  # vector space model to use
@@ -55,16 +98,16 @@ if __name__ == "__main__":
                                 configs += [Config(WsabieClassifier, SentenceBowMapper, lexicon, vsm, mwa, all_unk, num_comp, max_sampl, num_ep)]
                                 configs += [Config(WsabieClassifier, DependentsBowMapper, lexicon, vsm, mwa, all_unk, num_comp, max_sampl, num_ep)]
 
-    print "Starting resource manager"
+    print("Starting resource manager")
     sources = ResourceManager(HOME)
 
-    print "Initializing reporters"
+    print("Initializing reporters")
     reports = ReportManager(sources.out)
 
-    print "Running the experiments!"
+    print("Running the experiments!")
     runs = len(configs)*len(CORPORA_TRAIN)*len(CORPORA_TEST)
-    print len(configs), "configurations, ", len(CORPORA_TRAIN)*len(CORPORA_TEST), " train-test pairs -> ", \
-        runs, " runs"
+    print (len(configs), "configurations, ", len(CORPORA_TRAIN)*len(CORPORA_TEST), " train-test pairs -> ", \
+        runs, " runs")
 
     current_train = 0
     current_config = 0
@@ -130,6 +173,18 @@ if __name__ == "__main__":
                 reports.summary_reporter_v.report(corpus_train, corpus_test, conf, score_v, time.time() - start_time)
                 reports.summary_reporter_known.report(corpus_train, corpus_test, conf, score_known, time.time() - start_time)
 
-                print "============ STATUS: - train", current_train, "/", len(CORPORA_TRAIN), \
-                    "conf", current_config, "/", len(configs),\
-                    "test", current_test, "/", len(CORPORA_TEST)
+                print ("============ STATUS: - train", current_train, "/", len(CORPORA_TRAIN),
+                    "conf", current_config, "/", len(configs),
+                    "test", current_test, "/", len(CORPORA_TEST))
+
+
+if __name__ == "__main__":
+    HOME = sys.argv[2]
+    print(sys.argv[1])
+    if sys.argv[1] == 'train':
+        _train_all(HOME)
+    elif sys.argv[1] == 'decode':
+        _train_and_decode(HOME)
+    else:
+        print('Unsupported argument: ', sys.argv[1])
+        sys.exit(1)
